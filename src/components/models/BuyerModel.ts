@@ -1,7 +1,7 @@
 import { IBuyer, TPayment } from '../../types';
 
 export class BuyerModel {
-    protected payment: TPayment | null = null;
+    protected payment: TPayment = null;
     protected email = '';
     protected phone = '';
     protected address = '';
@@ -17,7 +17,7 @@ export class BuyerModel {
 
     getData(): IBuyer {
         return {
-            payment: this.payment as TPayment,
+            payment: this.payment,
             email: this.email,
             phone: this.phone,
             address: this.address,

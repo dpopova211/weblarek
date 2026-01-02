@@ -1,3 +1,4 @@
+import './scss/styles.scss';
 import { apiProducts } from './utils/data';
 import { ProductCatalog } from './components/models/ProductCatalog';
 import { Basket } from './components/models/Basket';
