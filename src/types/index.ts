@@ -23,6 +23,13 @@ export interface IBuyer {
 
 export type TPayment = 'cash' | 'card' | null;
 
+export interface IValidationResult {
+    payment?: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+}
+
 export interface IOrder extends IBuyer {
     items: string[];
     total: number;
