@@ -37,4 +37,8 @@ export class Modal extends Component<IModal> {
         document.body.style.overflow = 'auto';
         this._content.innerHTML = '';
     }
+    
+    isOpen(): boolean {
+        return this.container.classList.contains('modal_active');
+    }
 }

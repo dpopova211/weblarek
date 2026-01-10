@@ -1,79 +1,63 @@
 import { Form } from './Form';
-import { ensureElement } from '../../utils/utils';
 import { IBuyer } from '../../types';
-
-interface IContactsFormActions {
-    onSubmit: (event: Event) => void;
-}
+import { IEvents } from '../base/Events';
 
 export class ContactsForm extends Form<IBuyer> {
     protected _emailInput: HTMLInputElement;
     protected _phoneInput: HTMLInputElement;
-    protected _submitButton: HTMLButtonElement;
-    protected _errors: HTMLElement;
 
-    constructor(container: HTMLFormElement, actions?: IContactsFormActions) {
+    constructor(container: HTMLFormElement, events: IEvents) {
         super(container);
         
-        this._emailInput = ensureElement<HTMLInputElement>('input[name="email"]', container);
-        this._phoneInput = ensureElement<HTMLInputElement>('input[name="phone"]', container);
-        this._submitButton = ensureElement<HTMLButtonElement>('button[type="submit"]', container);
-        this._errors = ensureElement<HTMLElement>('.form__errors', container);
+        this._emailInput = this.ensureElement<HTMLInputElement>('input[name="email"]');
+        this._phoneInput = this.ensureElement<HTMLInputElement>('input[name="phone"]');
         
-        if (actions?.onSubmit) {
-            container.addEventListener('submit', (event) => {
-                event.preventDefault();
-                
-                if (this.validate()) {
-                    actions.onSubmit(event);
-                }
-            });
-        }
+        container.addEventListener('submit', (event: Event) => {
+            event.preventDefault();
+            events.emit('contacts:submit');
+        });
         
         this._emailInput.addEventListener('input', () => {
-            this.validate();
+            events.emit('contacts:input', { 
+                field: 'email', 
+                value: this._emailInput.value 
+            });
         });
         
         this._phoneInput.addEventListener('input', () => {
-            this.validate();
+            events.emit('contacts:input', { 
+                field: 'phone', 
+                value: this._phoneInput.value 
+            });
         });
         
-        this.validate();
+        this.validateForm();
     }
     
-    private validate(): boolean {
-        let errorMessages: string[] = [];
+    private validateForm(): boolean {
+        const email = this._emailInput.value.trim();
+        const phone = this._phoneInput.value.trim();
+        let isValid = true;
         
-        const emailValue = this._emailInput.value.trim();
-        if (!emailValue) {
-            errorMessages.push('Введите email');
+        if (!email) {
+            isValid = false;
         }
         
-        const phoneValue = this._phoneInput.value.trim();
-        if (!phoneValue) {
-            errorMessages.push('Введите телефон');
+        if (!phone) {
+            isValid = false;
         }
         
-        const isValid = errorMessages.length === 0;
-        
-        this.setDisabled(this._submitButton, !isValid);
-        
-        if (errorMessages.length > 0) {
-            this.errors = errorMessages.join('. ');
-        } else {
-            this.errors = '';
-        }
-        
+        this.valid = isValid;
         return isValid;
     }
 
     set email(value: string) {
         this._emailInput.value = value;
-        this.validate();
+        this.validateForm();
     }
 
     set phone(value: string) {
         this._phoneInput.value = value;
-        this.validate();
+        this.validateForm();
     }
 }

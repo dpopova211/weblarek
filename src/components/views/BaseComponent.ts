@@ -25,4 +25,8 @@ export abstract class ViewComponent<T> extends Component<T> {
     protected ensureElement<E extends HTMLElement>(selector: string): E {
         return ensureElement<E>(selector, this.container);
     }
+    
+    get element(): HTMLElement {
+        return this.container;
+    }
 }

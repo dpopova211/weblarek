@@ -3,6 +3,7 @@ import { IEvents } from '../base/Events';
 
 interface BuyerChangedEvent {
     data: IBuyer;
+    errors: Record<string, string>;
 }
 
 export class BuyerModel {
@@ -10,6 +11,7 @@ export class BuyerModel {
     protected email = '';
     protected phone = '';
     protected address = '';
+    protected errors: Record<string, string> = {};
 
     constructor(protected events: IEvents) {}
 
@@ -19,7 +21,10 @@ export class BuyerModel {
         if (data.phone !== undefined) this.phone = data.phone;
         if (data.address !== undefined) this.address = data.address;
         
-        this.events.emit<BuyerChangedEvent>('buyer:changed', { data: this.getData() });
+        this.events.emit<BuyerChangedEvent>('buyer:changed', { 
+            data: this.getData(), 
+            errors: this.validate() 
+        });
     }
 
     getData(): IBuyer {
@@ -37,7 +42,10 @@ export class BuyerModel {
         this.phone = '';
         this.address = '';
         
-        this.events.emit<BuyerChangedEvent>('buyer:changed', { data: this.getData() });
+        this.events.emit<BuyerChangedEvent>('buyer:changed', { 
+            data: this.getData(), 
+            errors: this.validate() 
+        });
     }
 
     validate(): Record<string, string> {
@@ -59,6 +67,11 @@ export class BuyerModel {
             errors.address = 'Укажите адрес';
         }
 
+        this.errors = errors;
         return errors;
+    }
+    
+    getErrors(): Record<string, string> {
+        return this.errors;
     }
 }

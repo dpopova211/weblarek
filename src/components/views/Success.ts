@@ -1,26 +1,25 @@
-import { ViewComponent } from './BaseComponent';
+import { ViewComponent } from '../views/BaseComponent';
 
 interface ISuccess {
-    onClick: () => void;
+    description: string;
 }
 
 export class Success extends ViewComponent<ISuccess> {
-    protected _closeButton: HTMLButtonElement;
     protected _description: HTMLElement;
+    protected _closeButton: HTMLButtonElement;
 
     constructor(container: HTMLElement, onClick?: () => void) {
         super(container);
         
-        this._closeButton = this.ensureElement<HTMLButtonElement>('.order-success__close');
         this._description = this.ensureElement<HTMLElement>('.order-success__description');
+        this._closeButton = this.ensureElement<HTMLButtonElement>('.order-success__close');
         
         if (onClick) {
             this._closeButton.addEventListener('click', onClick);
         }
     }
 
-    // Устанавливаем описание
-    setDescription(text: string) {
-        this.setText(this._description, text);
+    set description(value: string) {
+        this.setText(this._description, value);
     }
 }

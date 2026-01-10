@@ -1,6 +1,6 @@
 import './scss/styles.scss';
 import { API_URL, CDN_URL } from './utils/constants';
-import { cloneTemplate } from './utils/utils';
+import { cloneTemplate, ensureElement } from './utils/utils';
 import { EventEmitter } from './components/base/Events';
 import { Api } from './components/base/Api';
 import { Server } from './components/communication/Server';
@@ -26,8 +26,8 @@ interface CardSelectEvent { productId: string; }
 interface CardAddEvent { productId: string; }
 interface CardRemoveEvent { productId: string; }
 interface BasketRemoveEvent { productId: string; }
-interface OrderSubmitEvent { payment: string; address: string; }
-interface ContactsSubmitEvent { email: string; phone: string; }
+interface OrderInputEvent { field: string; value: string; }
+interface ContactsInputEvent { field: string; value: string; }
 
 class App {
     private events: EventEmitter;
@@ -41,6 +41,11 @@ class App {
     private modal: Modal;
     private gallery: Gallery;
     private header: Header;
+    
+    private basketView?: BasketView;
+    private orderForm?: OrderForm;
+    private contactsForm?: ContactsForm;
+    private successView?: Success;
     
     private templates: Map<string, HTMLTemplateElement> = new Map();
 
@@ -56,10 +61,10 @@ class App {
         
         this.loadTemplates();
         
-        this.modal = new Modal(this.ensureElement('#modal-container'));
-        this.gallery = new Gallery(this.ensureElement('.gallery'));
+        this.modal = new Modal(ensureElement('#modal-container'));
+        this.gallery = new Gallery(ensureElement('.gallery'));
         this.header = new Header(
-            this.ensureElement('.header'),
+            ensureElement('.header'),
             () => this.events.emit('basket:open')
         );
         
@@ -81,12 +86,6 @@ class App {
         });
     }
     
-    private ensureElement<T extends HTMLElement>(selector: string): T {
-        const element = document.querySelector(selector);
-        if (!element) throw new Error(`Element not found: ${selector}`);
-        return element as T;
-    }
-    
     private setupEventListeners() {
         this.events.on('catalog:changed', () => {
             this.renderCatalog();
@@ -95,12 +94,15 @@ class App {
         
         this.events.on('basket:changed', () => {
             this.updateBasketCounter();
+            // Обновляем представление корзины, если оно открыто
+            if (this.basketView && this.modal.isOpen()) {
+                this.updateBasketView();
+            }
         });
         
         this.events.on<CardSelectEvent>('card:select', (data) => {
             const product = this.catalog.getProductById(data.productId);
             if (product) {
-                this.catalog.setSelectedProduct(product);
                 this.openProductModal(product);
             }
         });
@@ -124,13 +126,9 @@ class App {
         });
         
         this.events.on<BasketRemoveEvent>('basket:remove', (data) => {
-            console.log('Удаляем товар с ID:', data.productId);
-            
             const product = this.catalog.getProductById(data.productId);
             if (product) {
                 this.basket.removeItem(product);
-                this.modal.close();
-                setTimeout(() => this.openBasketModal(), 0);
             }
         });
         
@@ -138,20 +136,34 @@ class App {
             this.openOrderModal();
         });
         
-        this.events.on<OrderSubmitEvent>('order:submit', (data) => {
-            this.buyer.setData({
-                payment: data.payment as 'cash' | 'card',
-                address: data.address
-            });
-            this.openContactsModal();
+        this.events.on<OrderInputEvent>('order:input', (data) => {
+            this.buyer.setData({ [data.field]: data.value });
         });
         
-        this.events.on<ContactsSubmitEvent>('contacts:submit', (data) => {
-            this.buyer.setData({
-                email: data.email,
-                phone: data.phone
-            });
-            this.sendOrder();
+        this.events.on<ContactsInputEvent>('contacts:input', (data) => {
+            this.buyer.setData({ [data.field]: data.value });
+        });
+        
+        this.events.on('order:submit', () => {
+            const errors = this.buyer.validate();
+            const buyerData = this.buyer.getData();
+            
+            if (!errors.payment && !errors.address && buyerData.payment && buyerData.address) {
+                this.openContactsModal();
+            }
+        });
+        
+        this.events.on('contacts:submit', () => {
+            const errors = this.buyer.validate();
+            const buyerData = this.buyer.getData();
+            
+            if (!errors.email && !errors.phone && buyerData.email && buyerData.phone) {
+                this.sendOrder();
+            }
+        });
+        
+        this.events.on('buyer:changed', () => {
+            this.updateForms();
         });
         
         this.events.on('success:close', () => {
@@ -184,8 +196,6 @@ class App {
             card.price = product.price;
             card.image = `${CDN_URL}${product.image}`;
             
-            cardElement.dataset.id = product.id;
-            
             return cardElement;
         }).filter(Boolean) as HTMLElement[];
         
@@ -195,6 +205,37 @@ class App {
     private updateBasketCounter() {
         const count = this.basket.getItemsCount();
         this.header.counter = count;
+    }
+    
+    private updateForms() {
+        const buyerData = this.buyer.getData();
+        const errors = this.buyer.getErrors();
+        
+        if (this.orderForm) {
+            this.orderForm.payment = buyerData.payment || '';
+            this.orderForm.address = buyerData.address;
+
+            this.orderForm.valid = !errors.payment && !errors.address;
+            if (errors.payment || errors.address) {
+                const errorMessages = [errors.payment, errors.address].filter(Boolean);
+                this.orderForm.errors = errorMessages.join('. ');
+            } else {
+                this.orderForm.errors = '';
+            }
+        }
+        
+        if (this.contactsForm) {
+            this.contactsForm.email = buyerData.email;
+            this.contactsForm.phone = buyerData.phone;
+            
+            this.contactsForm.valid = !errors.email && !errors.phone;
+            if (errors.email || errors.phone) {
+                const errorMessages = [errors.email, errors.phone].filter(Boolean);
+                this.contactsForm.errors = errorMessages.join('. ');
+            } else {
+                this.contactsForm.errors = '';
+            }
+        }
     }
     
     private openProductModal(product: IProduct) {
@@ -224,25 +265,27 @@ class App {
     }
     
     private openBasketModal() {
-        
         const template = this.templates.get('basket');
-        if (!template) {
-            console.error('Шаблон basket не найден');
-            return;
+        if (!template) return;
+
+        if (!this.basketView) {
+            const basketContent = cloneTemplate<HTMLElement>(template);
+            this.basketView = new BasketView(basketContent, () => {
+                this.events.emit('basket:submit');
+            });
         }
-               
-        const modalContent = cloneTemplate<HTMLElement>(template);
         
-        const basketView = new BasketView(modalContent, () => {
-            this.events.emit('basket:submit');
-        });
+        this.updateBasketView();
+        this.modal.content = (this.basketView as any).container;
+        this.modal.open();
+    }
+    
+    private updateBasketView() {
+        if (!this.basketView) return;
         
         const items = this.basket.getItems().map((product, index) => {
             const itemTemplate = this.templates.get('card-basket');
-            if (!itemTemplate) {
-                console.error('Шаблон card-basket не найден');
-                return null;
-            }
+            if (!itemTemplate) return null;
             
             const itemElement = cloneTemplate<HTMLElement>(itemTemplate);
             const card = new CardBasket(itemElement, () => {
@@ -253,86 +296,47 @@ class App {
             card.price = product.price;
             card.index = index + 1;
             
-            itemElement.dataset.id = product.id;
-            
             return itemElement;
         }).filter(Boolean) as HTMLElement[];
-               
-        basketView.items = items;
-        basketView.total = this.basket.getTotalPrice();
-        basketView.selected = items.length > 0;
         
-        this.modal.content = modalContent;
-        this.modal.open();
+        this.basketView.items = items;
+        this.basketView.total = this.basket.getTotalPrice();
+        this.basketView.selected = items.length > 0;
     }
     
     private openOrderModal() {
         const template = this.templates.get('order');
         if (!template) return;
-        
-        const modalContent = cloneTemplate<HTMLElement>(template);
-        const formElement = modalContent as unknown as HTMLFormElement;
-        
-        const orderForm = new OrderForm(formElement, {
-            onSubmit: (event: Event) => {
-                event.preventDefault();
-                
-                const paymentButton = modalContent.querySelector('.button_alt-active');
-                const addressInput = modalContent.querySelector('input[name="address"]') as HTMLInputElement;
-                
-                if (paymentButton && addressInput.value) {
-                    this.events.emit<OrderSubmitEvent>('order:submit', {
-                        payment: paymentButton.getAttribute('name') || '',
-                        address: addressInput.value
-                    });
-                }
-            }
-        });
-        
+
+        if (!this.orderForm) {
+            const orderContent = cloneTemplate<HTMLElement>(template);
+            const formElement = orderContent as unknown as HTMLFormElement;
+            this.orderForm = new OrderForm(formElement, this.events);
+        }
+
         const buyerData = this.buyer.getData();
-        if (buyerData.payment) {
-            orderForm.payment = buyerData.payment;
-        }
-        if (buyerData.address) {
-            orderForm.address = buyerData.address;
-        }
-        
-        this.modal.content = modalContent;
+        this.orderForm.payment = buyerData.payment || '';
+        this.orderForm.address = buyerData.address;
+
+        this.modal.content = (this.orderForm as any).container;
         this.modal.open();
     }
     
     private openContactsModal() {
         const template = this.templates.get('contacts');
         if (!template) return;
-        
-        const modalContent = cloneTemplate<HTMLElement>(template);
-        const formElement = modalContent as unknown as HTMLFormElement;
-        
-        const contactsForm = new ContactsForm(formElement, {
-            onSubmit: (event: Event) => {
-                event.preventDefault();
-                
-                const emailInput = modalContent.querySelector('input[name="email"]') as HTMLInputElement;
-                const phoneInput = modalContent.querySelector('input[name="phone"]') as HTMLInputElement;
-                
-                if (emailInput.value && phoneInput.value) {
-                    this.events.emit<ContactsSubmitEvent>('contacts:submit', {
-                        email: emailInput.value,
-                        phone: phoneInput.value
-                    });
-                }
-            }
-        });
-        
+
+        if (!this.contactsForm) {
+            const contactsContent = cloneTemplate<HTMLElement>(template);
+            const formElement = contactsContent as unknown as HTMLFormElement;
+            this.contactsForm = new ContactsForm(formElement, this.events);
+        }
+
         const buyerData = this.buyer.getData();
-        if (buyerData.email) {
-            contactsForm.email = buyerData.email;
-        }
-        if (buyerData.phone) {
-            contactsForm.phone = buyerData.phone;
-        }
-        
-        this.modal.content = modalContent;
+        this.contactsForm.email = buyerData.email;
+        this.contactsForm.phone = buyerData.phone;
+
+        this.modal.content = (this.contactsForm as any).container;
         this.modal.open();
     }
     
@@ -358,9 +362,7 @@ class App {
                 total: this.basket.getTotalPrice()
             };
             
-            
             const response = await this.server.sendOrder(orderData);
-            
             this.showSuccessModal(response);
             
             this.basket.clear();
@@ -376,44 +378,36 @@ class App {
         const template = this.templates.get('success');
         if (!template) return;
         
+        if (!this.successView) {
+            const successContent = cloneTemplate<HTMLElement>(template);
+            this.successView = new Success(successContent, () => {
+                this.events.emit('success:close');
+            });
+        }
+        
+        this.successView.description = 
+            `Заказ #${orderResponse.id} оформлен на сумму ${orderResponse.total} синапсов`;
+
+        this.modal.content = (this.successView as any).container;
+        this.modal.open();
+    }
+    
+    private showErrorModal(message: string) {
+        const template = this.templates.get('success');
+        if (!template) return;
+        
         const modalContent = cloneTemplate<HTMLElement>(template);
         
-        new Success(modalContent, () => {
-            this.events.emit('success:close');
+        const errorView = new Success(modalContent, () => {
+            this.modal.close();
         });
         
-        const descriptionElement = modalContent.querySelector('.order-success__description');
-        if (descriptionElement) {
-            descriptionElement.textContent = 
-                `Заказ #${orderResponse.id} оформлен на сумму ${orderResponse.total} синапсов`;
-        }
+        errorView.description = message;
         
         this.modal.content = modalContent;
         this.modal.open();
     }
-
-    private showErrorModal(message: string) {
-        const errorContent = document.createElement('div');
-        errorContent.innerHTML = `
-            <div class="order-success" style="text-align: center;">
-                <h2 class="order-success__title" style="color: #dc3545;">Ошибка</h2>
-                <p class="order-success__description">${message}</p>
-                <button class="button order-success__close">Понятно</button>
-            </div>
-        `;
-        
-        const closeButton = errorContent.querySelector('.order-success__close');
-        if (closeButton) {
-            closeButton.addEventListener('click', () => {
-                this.modal.close();
-            });
-        }
-        
-        this.modal.content = errorContent;
-        this.modal.open();
-    }
 }
-// Запуск приложения при загрузке DOM
-document.addEventListener('DOMContentLoaded', () => {
-    new App();
-});
+
+// Запуск приложения
+new App();

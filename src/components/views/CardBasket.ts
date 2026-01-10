@@ -16,8 +16,6 @@ export class CardBasket extends Card<IProduct> {
                 event.stopPropagation(); // Важно!
                 onClick(event);
             });
-        } else {
-            console.warn('Кнопка удаления не найдена или обработчик не передан');
         }
     }
 

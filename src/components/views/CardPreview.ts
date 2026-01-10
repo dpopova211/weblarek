@@ -26,5 +26,16 @@ export class CardPreview extends Card<IProduct> {
 
     set buttonDisabled(value: boolean) {
         this.setDisabled(this._button, value);
+        if (value) {
+            this.setText(this._button, 'Недоступно');
+        }
+    }
+    
+    set price(value: number | null) {
+        super.price = value;
+        // Дизейблим кнопку только в превью для бесценного товара
+        if (value === null) {
+            this.buttonDisabled = true;
+        }
     }
 }
