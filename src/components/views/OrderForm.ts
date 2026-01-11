@@ -32,43 +32,15 @@ export class OrderForm extends Form<IBuyer> {
                 value: this._addressInput.value 
             });
         });
-
-        this.validateForm();
-    }
-    
-    private validateForm(): boolean {
-        const buyerData = this.getFormData();
-        let isValid = true;
-        
-        if (!buyerData.payment) {
-            isValid = false;
-        }
-        
-        if (!buyerData.address) {
-            isValid = false;
-        }
-        
-        this.valid = isValid;
-        return isValid;
-    }
-    
-    private getFormData(): { payment: string; address: string } {
-        const paymentButton = this.container.querySelector('.button_alt-active');
-        return {
-            payment: paymentButton ? paymentButton.getAttribute('name') || '' : '',
-            address: this._addressInput.value.trim()
-        };
     }
 
     set payment(value: string) {
         this._paymentButtons.forEach(button => {
             button.classList.toggle('button_alt-active', button.name === value);
         });
-        this.validateForm();
     }
 
     set address(value: string) {
         this._addressInput.value = value;
-        this.validateForm();
     }
 }

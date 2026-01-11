@@ -30,34 +30,13 @@ export class ContactsForm extends Form<IBuyer> {
                 value: this._phoneInput.value 
             });
         });
-        
-        this.validateForm();
-    }
-    
-    private validateForm(): boolean {
-        const email = this._emailInput.value.trim();
-        const phone = this._phoneInput.value.trim();
-        let isValid = true;
-        
-        if (!email) {
-            isValid = false;
-        }
-        
-        if (!phone) {
-            isValid = false;
-        }
-        
-        this.valid = isValid;
-        return isValid;
     }
 
     set email(value: string) {
         this._emailInput.value = value;
-        this.validateForm();
     }
 
     set phone(value: string) {
         this._phoneInput.value = value;
-        this.validateForm();
     }
 }
